@@ -102,9 +102,13 @@ async function createStorage(): Promise<StorageBundle> {
   };
 }
 
+const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
+const SESSION_CLEANUP_INTERVAL_MS = 60 * 1000; // 60 seconds
+
 interface SessionEntry {
   transport: StreamableHTTPServerTransport;
   server: Awaited<ReturnType<typeof createMcpServer>>;
+  createdAt: number;
 }
 
 async function maybeStartObservatory(hubStorage?: HubStorage, persistentStorage?: ThoughtboxStorage): Promise<ObservatoryServer | null> {
@@ -137,6 +141,26 @@ async function startHttpServer() {
   });
 
   const sessions = new Map<string, SessionEntry>();
+
+  // Periodic TTL-based session cleanup
+  const sessionCleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [id, entry] of sessions) {
+      const age = now - entry.createdAt;
+      if (age >= SESSION_TTL_MS) {
+        console.error(`[MCP] Cleaning up expired session ${id} (age: ${Math.round(age / 1000)}s)`);
+        try {
+          entry.transport.close();
+        } catch {
+          // ignore close errors
+        }
+        sessions.delete(id);
+      }
+    }
+  }, SESSION_CLEANUP_INTERVAL_MS);
+
+  // Ensure cleanup timer doesn't prevent process exit
+  sessionCleanupTimer.unref();
 
   app.all("/mcp", async (req: Request, res: Response) => {
     const mcpSessionId = req.headers["mcp-session-id"] as string | undefined;
@@ -174,7 +198,7 @@ async function startHttpServer() {
         enableJsonResponse: true,
       });
 
-      sessions.set(sessionId, { transport, server });
+      sessions.set(sessionId, { transport, server, createdAt: Date.now() });
 
       transport.onclose = () => {
         sessions.delete(transport.sessionId || sessionId);
@@ -221,6 +245,7 @@ async function startHttpServer() {
   });
 
   const shutdown = async () => {
+    clearInterval(sessionCleanupTimer);
     for (const entry of sessions.values()) {
       try {
         entry.transport.close();
