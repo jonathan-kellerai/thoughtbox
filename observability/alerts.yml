@@ -1,4 +1,33 @@
 groups:
+- name: archangel-gateway
+  rules:
+  - alert: UpstreamDown
+    expr: mcp_upstream_available == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Upstream {{ $labels.server_name }} is DOWN"
+      description: "Upstream target {{ $labels.server_name }} has been unavailable for > 1 minute"
+
+  - alert: HighErrorRate
+    expr: (sum by (server_name) (rate(mcp_requests_total{status="error"}[5m])) / sum by (server_name) (rate(mcp_requests_total[5m]))) > 0.05 and sum by (server_name) (rate(mcp_requests_total[5m])) > 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High error rate on {{ $labels.server_name }}"
+      description: "Error rate is {{ $value | humanizePercentage }} over last 5 minutes (threshold: 5%)"
+
+  - alert: HighLatency
+    expr: histogram_quantile(0.95, sum by (le, server_name) (rate(mcp_request_duration_seconds_bucket[5m]))) > 10
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High p95 latency on {{ $labels.server_name }}"
+      description: "P95 latency is {{ $value }}s over last 5 minutes (threshold: 10s)"
+
 - name: thoughtbox-mcp
   rules:
   - alert: ThoughtboxHighErrorRate
