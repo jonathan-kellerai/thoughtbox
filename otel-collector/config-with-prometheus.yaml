@@ -41,6 +41,10 @@ exporters:
     rotation:
       max_megabytes: 50
       max_days: 7
+  otlp/jaeger:
+    endpoint: "jaeger:4317"
+    tls:
+      insecure: true
 
 service:
   pipelines:
@@ -52,3 +56,7 @@ service:
       receivers: [otlp]
       processors: [batch, attributes/sanitize]
       exporters: [debug, file/logs]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, attributes/sanitize]
+      exporters: [otlp/jaeger]
