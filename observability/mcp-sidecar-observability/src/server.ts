@@ -35,6 +35,8 @@ const app = Fastify({
   },
 });
 
+const MAX_REQUEST_BYTES = 1_048_576; // 1 MB
+
 /**
  * Standard MCP JSON-RPC endpoint
  * POST / with Content-Type: application/json
@@ -42,11 +44,30 @@ const app = Fastify({
 app.post('/', async (request, reply) => {
   instrumentation.connectionOpened();
   const start = Date.now();
-  
+
   try {
+    // Enforce request size limit before any processing
+    const rawBody = JSON.stringify(request.body);
+    const requestBytes = Buffer.byteLength(rawBody, 'utf8');
+    if (requestBytes > MAX_REQUEST_BYTES) {
+      reply.code(400);
+      return {
+        jsonrpc: '2.0',
+        id: (request.body as any)?.id,
+        error: {
+          code: -32600,
+          message: 'Request exceeds 1MB limit',
+          data: {
+            size: requestBytes,
+            limit: MAX_REQUEST_BYTES,
+          },
+        },
+      };
+    }
+
     // Parse request body
     const body = request.body as JSONRPCRequest;
-    
+
     // Validate JSON-RPC format
     if (!body || body.jsonrpc !== '2.0' || !body.method) {
       reply.code(400);
@@ -59,9 +80,9 @@ app.post('/', async (request, reply) => {
         },
       };
     }
-    
+
     // Record incoming message size
-    const requestSize = JSON.stringify(body).length;
+    const requestSize = requestBytes;
     instrumentation.recordMessageBytes('in', requestSize);
     
     // Record request
