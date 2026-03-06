@@ -54,6 +54,11 @@ ENV THOUGHTBOX_PROJECT=_default
 
 VOLUME ["/data/thoughtbox"]
 
+# MCP server port (configurable via PORT env var, default 1731)
+EXPOSE 1731
+# Observatory UI + WebSocket port (configurable via THOUGHTBOX_OBSERVATORY_PORT, default 1729)
+EXPOSE 1729
+
 # Health check endpoint (use PORT env var, default 1731)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e 'const port = process.env.PORT || "1731"; require("http").get(`http://localhost:${port}/health`, (r) => process.exit(r.statusCode === 200 ? 0 : 1))' || exit 1
